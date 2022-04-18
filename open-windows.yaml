@@ -12,10 +12,9 @@ blueprint:
           entity:
             device_class: opening
     triggers:
-      name: Triggers
+      name: Trigger
       description: Triggers that call this blueprint
       selector:
-        trigger: {}
     actions:
       name: Actions
       description: Notifications or similar to be run. {{sensors}} is replaced with
