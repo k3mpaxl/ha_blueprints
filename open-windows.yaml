@@ -1,0 +1,50 @@
+blueprint:
+  name: Window open detection & notification for opening sensors
+  description: Regularly test all sensors with 'opening' device-class for state open
+  domain: automation
+  input:
+    exclude:
+      name: Excluded Sensors
+      description: Opening sensors to exclude from detection. Only entities are supported, devices must be expanded!
+      default: {entity_id: []}
+      selector:
+        target:
+          entity:
+            device_class: opening
+    triggers:
+      name: Triggers
+      description: Triggers that call this blueprint
+      selector:
+        trigger: {}
+    actions:
+      name: Actions
+      description: Notifications or similar to be run. {{sensors}} is replaced with
+        the names of sensors being open.
+      selector:
+        action: {}
+variables:
+  day: !input 'day'
+  threshold: !input 'threshold'
+  exclude: !input 'exclude'
+  sensors: >-
+    {% set result = namespace(sensors=[]) %}
+    {% for state in states.sensor | selectattr('attributes.device_class', '==', 'opening') %}
+      {% if "on" == state.state and not state.entity_id in exclude.entity_id %}
+        {% set result.sensors = result.sensors + [state.name ~ ' (' ~ state.state ~ ' %)'] %}
+      {% endif %}
+    {% endfor %}
+    {% for state in states.binary_sensor | selectattr('attributes.device_class', '==', 'opening') | selectattr('state', '==', 'on') %}
+      {% if not state.entity_id in exclude.entity_id %}
+        {% set result.sensors = result.sensors + [state.name] %}
+      {% endif %}
+    {% endfor %}
+    {{result.sensors|join(', ')}}
+trigger:
+- choose: []
+  default: !input 'triggers'
+condition:
+- '{{ sensors != '''' and (day | int == 0 or day | int == now().isoweekday()) }}'
+action:
+- choose: []
+  default: !input 'actions'
+mode: single
