@@ -30,7 +30,6 @@ blueprint:
       selector:
         action: {}
 variables:
-  threshold: !input 'threshold'
   exclude: !input 'exclude'
   sensors: >-
     {% set result = namespace(sensors=[]) %}
