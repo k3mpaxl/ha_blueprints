@@ -43,7 +43,7 @@ trigger:
 - choose: []
   default: !input 'triggers'
 condition:
-- '{{ sensors != '''' and (day | int == 0 or day | int == now().isoweekday()) }}'
+- '{{ sensors != '''' }}'
 action:
 - choose: []
   default: !input 'actions'
