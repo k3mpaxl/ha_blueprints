@@ -16,7 +16,7 @@ blueprint:
       description: The door that is opened when starting the notification.
       selector:
         entity:
-          domain: climate
+          domain: opening
     leaving_zone:
       name: Leaving Zone
       description: The zone that that the last person is leaving through the opened door.
