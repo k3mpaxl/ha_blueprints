@@ -11,11 +11,18 @@ blueprint:
         target:
           entity:
             device_class: opening
-    triggers:
-      name: Trigger
-      description: Triggers that call this blueprint
+    door_sensor:
+      name: Main Door
+      description: The door that is opened when starting the notification.
       selector:
-        trigger: {}
+        entity:
+          domain: climate
+    leaving_zone:
+      name: Leaving Zone
+      description: The zone that that the last person is leaving through the opened door.
+      selector:
+        entity:
+          domain: zone
     actions:
       name: Actions
       description: Notifications or similar to be run. {{sensors}} is replaced with
@@ -40,10 +47,13 @@ variables:
     {% endfor %}
     {{result.sensors|join(', ')}}
 trigger:
-- choose: []
-  default: !input 'triggers'
+  platform: state
+  entity_id: !input door_sensor
 condition:
 - '{{ sensors != '''' }}'
+- condition: numeric_state
+  entity_id: !input 'leaving_zone'
+  below: '2'
 action:
 - choose: []
   default: !input 'actions'
