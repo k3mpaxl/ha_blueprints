@@ -30,7 +30,6 @@ blueprint:
       selector:
         action: {}
 variables:
-  day: !input 'day'
   threshold: !input 'threshold'
   exclude: !input 'exclude'
   sensors: >-
