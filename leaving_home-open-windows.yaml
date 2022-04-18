@@ -1,5 +1,5 @@
 blueprint:
-  name: Window open detection & notification for opening sensors
+  name: Last person leaving a zone with windows left open
   description: Regularly test all sensors with 'opening' device-class for state open
   domain: automation
   input:
