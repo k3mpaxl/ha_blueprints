@@ -1,0 +1,70 @@
+blueprint:
+  name: Heating Schedule Controller
+  description: Control heating based on a schedule, window state, and presence
+
+input:
+  schedule_entity:
+    name: Schedule Entity
+    description: 'Select the schedule helper entity for heating'
+    selector:
+      entity:
+        domain: input_boolean
+
+  temperature_entity:
+    name: Temperature Entity
+    description: 'Select the entity representing the target temperature'
+    selector:
+      entity:
+        domain: climate
+
+  window_sensor_entity:
+    name: Window Sensor Entity
+    description: 'Select the window opening sensor entity'
+    selector:
+      entity:
+        domain: binary_sensor
+
+  presence_entity:
+    name: Presence Entity
+    description: 'Select the presence detection entity'
+    selector:
+      entity:
+        domain: device_tracker
+
+  target_temperature:
+    name: Target Temperature
+    description: 'Enter the target temperature when conditions are met'
+    selector:
+      number:
+
+  setback_temperature:
+    name: Setback Temperature
+    description: 'Enter the setback temperature when the window is open or no presence is detected'
+    selector:
+      number:
+
+mode: restart
+
+trigger:
+  platform: state
+  entity_id:
+    - input_boolean.heating_schedule_enabled
+    - input_boolean.window_open
+    - input_boolean.presence_detected
+    - input_boolean.schedule_changed
+  platform: time
+  at: "{{ state_attr(input.schedule_entity, 'time') }}"
+
+action:
+  service: climate.set_temperature
+  target:
+    entity_id: input.temperature_entity
+  data_template:
+    temperature: >-
+      {% if is_state(input_boolean.heating_schedule_enabled, 'on') and
+            is_state(input_boolean.window_open, 'off') and
+            is_state(input_boolean.presence_detected, 'on') %}
+        {{ input.target_temperature }}
+      {% else %}
+        {{ input.setback_temperature }}
+      {% endif %}
