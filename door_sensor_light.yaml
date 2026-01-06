@@ -1,0 +1,85 @@
+blueprint:
+  name: Door Sensor - Turn on/off Light with Time Conditions
+  description: >
+    Turn on a light when a door is opened. The light will turn off after a specified delay
+    when the door is closed. Optionally restrict activation to specific time periods.
+  domain: automation
+  input:
+    door_sensor:
+      name: Door Sensor
+      description: The door sensor that triggers the automation
+      selector:
+        entity:
+          domain: binary_sensor
+          device_class: door
+    
+    light_target:
+      name: Light
+      description: The light to control
+      selector:
+        target:
+          entity:
+            domain: light
+    
+    delay_time:
+      name: Delay Time
+      description: Time to leave the light on after the door closes
+      default: 120
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+          mode: slider
+    
+    time_active_start:
+      name: Active Time Start
+      description: Time to start the automation (leave as default to run all day)
+      default: "00:00:00"
+      selector:
+        time: {}
+    
+    time_active_stop:
+      name: Active Time Stop
+      description: Time to stop the automation (leave as default to run all day)
+      default: "23:59:59"
+      selector:
+        time: {}
+
+trigger:
+  - platform: state
+    entity_id: !input door_sensor
+    to: "on"
+    id: "door_opened"
+  
+  - platform: state
+    entity_id: !input door_sensor
+    to: "off"
+    id: "door_closed"
+
+condition:
+  - condition: time
+    after: !input time_active_start
+    before: !input time_active_stop
+
+action:
+  - choose:
+      # When door opens - turn light on
+      - conditions:
+          - condition: trigger
+            id: "door_opened"
+        sequence:
+          - service: light.turn_on
+            target: !input light_target
+      
+      # When door closes - wait then turn light off
+      - conditions:
+          - condition: trigger
+            id: "door_closed"
+        sequence:
+          - delay:
+              seconds: !input delay_time
+          - service: light.turn_off
+            target: !input light_target
+
+mode: restart
