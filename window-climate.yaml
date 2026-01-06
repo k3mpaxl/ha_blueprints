@@ -16,7 +16,7 @@ blueprint:
           multiple: true
           domain: binary_sensor
           device_class:
-            - window
+            - opening
             - door
     
     climate_target:
