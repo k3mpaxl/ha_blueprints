@@ -1,53 +1,184 @@
 blueprint:
-  name: Window open, climate off after a defined time
-  description: An automation that turns off a running your climate device for exmple a heater
-    or an air conditioning if a window sensor is open for a specific time. It waits
-    until the window is closed again in order to turn the climate entity on again.
+  name: Window Open - Climate Control with State Restoration
+  description: >
+    Automatically turns off climate devices (heating/cooling) when a window is open for a
+    specified time. Restores the previous climate state when the window closes.
+    Supports multiple windows and optional time restrictions.
   domain: automation
+  source_url: https://github.com/YOUR_USERNAME/YOUR_REPO/blob/main/window_climate_control.yaml
+  
   input:
     window_entity:
-      name: Window Sensor
-      description: The window sensor that controls the climate entity.
+      name: Window Sensor(s)
+      description: Window or door sensor(s) that control the climate device
       selector:
         entity:
+          multiple: true
           domain: binary_sensor
-    minimum_open_time:
-      name: Miniumum time the window is open
-      description: Time in seconds to wait until the automation is triggered
-      default: 12
-      selector:
-        number:
-          min: 0.0
-          max: 120.0
-          unit_of_measurement: seconds
-          mode: slider
-          step: 1.0
+          device_class:
+            - window
+            - door
+    
     climate_target:
       name: Climate Device
-      description: The climate entity that is controlled by the window sensor.
+      description: The climate entity to control (thermostat, AC, heater)
       selector:
         entity:
           domain: climate
-trigger:
-- platform: state
-  entity_id: !input 'window_entity'
-  to: 'on'
-  for: !input 'minimum_open_time'
-condition:
-- condition: not
-  conditions:
-    - condition: state
-      entity_id: !input 'climate_target'
-      state: 'off'
-action:
-- service: climate.turn_off
-  entity_id: !input 'climate_target'
-- wait_for_trigger:
-  - platform: state
-    entity_id: !input 'window_entity'
-    to: 'off'
-    for: !input 'minimum_open_time'
-  continue_on_timeout: false
-- service: climate.turn_on
-  entity_id: !input 'climate_target'
+    
+    window_open_time:
+      name: Window Open Delay
+      description: How long the window must be open before turning off climate
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 300
+          unit_of_measurement: seconds
+          mode: slider
+          step: 5
+    
+    window_close_time:
+      name: Window Close Delay
+      description: How long the window must be closed before restoring climate
+      default: 10
+      selector:
+        number:
+          min: 0
+          max: 300
+          unit_of_measurement: seconds
+          mode: slider
+          step: 5
+    
+    time_restriction:
+      name: Enable Time Restriction
+      description: Only run automation during specific hours
+      default: false
+      selector:
+        boolean: {}
+    
+    time_start:
+      name: Start Time
+      description: Only active after this time (if restriction enabled)
+      default: "00:00:00"
+      selector:
+        time: {}
+    
+    time_end:
+      name: End Time
+      description: Only active before this time (if restriction enabled)
+      default: "23:59:59"
+      selector:
+        time: {}
 
+variables:
+  climate_entity: !input climate_target
+  window_open_delay: !input window_open_time
+  window_close_delay: !input window_close_time
+  use_time_restriction: !input time_restriction
+
+trigger:
+  # Any window opens
+  - platform: state
+    entity_id: !input window_entity
+    to: "on"
+    for:
+      seconds: !input window_open_time
+    id: window_opened
+
+condition:
+  # Check time restriction if enabled
+  - condition: or
+    conditions:
+      - condition: template
+        value_template: "{{ not use_time_restriction }}"
+      - condition: time
+        after: !input time_start
+        before: !input time_end
+  
+  # Only act if climate is currently running (not already off)
+  - condition: template
+    value_template: "{{ not is_state(climate_entity, 'off') }}"
+
+action:
+  # Store current climate state
+  - variables:
+      previous_hvac_mode: "{{ state_attr(climate_entity, 'hvac_mode') }}"
+      previous_temperature: "{{ state_attr(climate_entity, 'temperature') }}"
+      previous_target_temp_high: "{{ state_attr(climate_entity, 'target_temp_high') }}"
+      previous_target_temp_low: "{{ state_attr(climate_entity, 'target_temp_low') }}"
+      previous_fan_mode: "{{ state_attr(climate_entity, 'fan_mode') }}"
+      previous_preset_mode: "{{ state_attr(climate_entity, 'preset_mode') }}"
+  
+  # Turn off climate
+  - service: climate.turn_off
+    target:
+      entity_id: !input climate_target
+  
+  # Wait for ALL windows to close
+  - wait_for_trigger:
+      - platform: template
+        value_template: >
+          {% set windows = expand(state_attr('automation.' ~ this.entity_id.split('.')[1], 'window_entity')) %}
+          {{ windows | selectattr('state', 'eq', 'on') | list | count == 0 }}
+        for:
+          seconds: !input window_close_time
+    timeout:
+      hours: 24
+    continue_on_timeout: false
+  
+  # Restore previous climate state
+  - service: climate.set_hvac_mode
+    target:
+      entity_id: !input climate_target
+    data:
+      hvac_mode: "{{ previous_hvac_mode }}"
+  
+  # Restore temperature if it was set
+  - if:
+      - condition: template
+        value_template: "{{ previous_temperature not in [none, 'None', 'unknown', 'unavailable'] }}"
+    then:
+      - service: climate.set_temperature
+        target:
+          entity_id: !input climate_target
+        data:
+          temperature: "{{ previous_temperature }}"
+  
+  # Restore temperature range if it was set (for heat/cool mode)
+  - if:
+      - condition: template
+        value_template: >
+          {{ previous_target_temp_high not in [none, 'None', 'unknown', 'unavailable'] 
+             and previous_target_temp_low not in [none, 'None', 'unknown', 'unavailable'] }}
+    then:
+      - service: climate.set_temperature
+        target:
+          entity_id: !input climate_target
+        data:
+          target_temp_high: "{{ previous_target_temp_high }}"
+          target_temp_low: "{{ previous_target_temp_low }}"
+  
+  # Restore fan mode if it was set
+  - if:
+      - condition: template
+        value_template: "{{ previous_fan_mode not in [none, 'None', 'unknown', 'unavailable'] }}"
+    then:
+      - service: climate.set_fan_mode
+        target:
+          entity_id: !input climate_target
+        data:
+          fan_mode: "{{ previous_fan_mode }}"
+  
+  # Restore preset mode if it was set
+  - if:
+      - condition: template
+        value_template: "{{ previous_preset_mode not in [none, 'None', 'unknown', 'unavailable'] }}"
+    then:
+      - service: climate.set_preset_mode
+        target:
+          entity_id: !input climate_target
+        data:
+          preset_mode: "{{ previous_preset_mode }}"
+
+mode: restart
